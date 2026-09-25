@@ -20,13 +20,21 @@
 create extension if not exists pgcrypto;
 
 -- ---------------------------------------------------------------------------
--- Enums
+-- Enums (idempotent: DO blocks swallow "already exists" on re-run)
 -- ---------------------------------------------------------------------------
-create type public.user_role as enum ('customer','agent','admin');
-create type public.request_priority as enum ('low','medium','high');
-create type public.request_status as enum (
-  'created','assigned','accepted','in_progress','completed','cancelled'
-);
+do $$ begin
+  create type public.user_role as enum ('customer','agent','admin');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.request_priority as enum ('low','medium','high');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.request_status as enum (
+    'created','assigned','accepted','in_progress','completed','cancelled'
+  );
+exception when duplicate_object then null; end $$;
 
 -- ---------------------------------------------------------------------------
 -- Tables
@@ -259,7 +267,9 @@ language plpgsql
 as $$
 begin
   if new.role is distinct from old.role then
-    if not exists (
+    -- auth.uid() is NULL in database-admin context (SQL editor, seed scripts) --
+    -- which is safe because RLS still blocks anonymous & client access.
+    if auth.uid() is not null and not exists (
       select 1 from public.profiles
       where id = auth.uid() and role = 'admin'
     ) then

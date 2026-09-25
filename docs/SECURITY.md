@@ -83,7 +83,7 @@ Allow-listed events (enforced inside `write_audit`):
 
 **Never logged:** passwords, access tokens, refresh tokens, anon/service API
 keys, or any secret material. `metadata` carries only business facts (request
-codes, agent ids, statuses, emails) — see `0001_schema.sql` triggers for the
+codes, agent ids, statuses, emails) — see `001_schema.sql` triggers for the
 exact payloads.
 
 ## Error handling
