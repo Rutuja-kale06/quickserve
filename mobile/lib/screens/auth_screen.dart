@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
+import '../services/supabase_service.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -20,10 +21,12 @@ class _AuthScreenState extends State<AuthScreen> {
       return;
     }
     setState(() => loading = true);
+    final api = SupabaseService();
     try {
       final auth = Supabase.instance.client.auth;
       if (login) {
         await auth.signInWithPassword(email: email.text.trim(), password: password.text);
+        await api.logEvent('LOGIN_SUCCESS', metadata: {'email': email.text.trim()});
       } else {
         await auth.signUp(
           email: email.text.trim(),
@@ -34,6 +37,10 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
     } on AuthException catch (e) {
+      if (login) {
+        await api.logEvent('LOGIN_FAILED',
+            metadata: {'email': email.text.trim(), 'reason': e.message});
+      }
       _msg(e.message);
     } catch (e) {
       _msg('Something went wrong. Please try again.');

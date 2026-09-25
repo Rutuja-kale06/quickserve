@@ -5,10 +5,12 @@ import 'request_details_screen.dart';
 import 'create_request_screen.dart';
 import 'services_screen.dart';
 import 'profile_screen.dart';
+import 'my_requests_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-  @override State<HomeScreen> createState() => _HomeScreenState();
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
@@ -17,27 +19,70 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ServiceRequest> requests = [];
   bool loading = true;
 
+  // Agent view filter: all / active / completed.
+  String agentFilter = 'Active';
+
   @override
-  void initState() { super.initState(); load(); }
+  void initState() {
+    super.initState();
+    load();
+  }
 
   Future<void> load() async {
     try {
       final p = await api.getProfile();
       final r = await api.getRequests(agentId: p.role == 'agent' ? p.id : null);
-      if (mounted) setState(() { profile = p; requests = r; loading = false; });
+      if (!mounted) return;
+      setState(() {
+        profile = p;
+        requests = r;
+        loading = false;
+      });
     } catch (_) {
-      if (mounted) setState(() => loading = false);
+      if (!mounted) return;
+      setState(() => loading = false);
     }
+  }
+
+  List<ServiceRequest> get visibleRequests {
+    if (agentFilter == 'Active') {
+      return requests
+          .where((r) => r.status != 'completed' && r.status != 'cancelled')
+          .toList();
+    }
+    if (agentFilter == 'Completed') {
+      return requests.where((r) => r.status == 'completed').toList();
+    }
+    return requests;
+  }
+
+  Future<void> _openRequest(ServiceRequest r) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => RequestDetailsScreen(request: r, profile: profile!)),
+    );
+    if (mounted) load();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (loading && profile == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     final p = profile!;
+    final isAgent = p.role == 'agent';
+    final recent = isAgent ? visibleRequests : requests.take(3).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Hi, ${p.fullName.isEmpty ? 'there' : p.fullName.split(' ').first}'),
-        actions: [IconButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())), icon: const Icon(Icons.person_outline))],
+        actions: [
+          IconButton(
+            onPressed: () => Navigator.push(
+                context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            icon: const Icon(Icons.person_outline),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: load,
@@ -51,49 +96,84 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     const CircleAvatar(radius: 28, child: Icon(Icons.home_repair_service)),
                     const SizedBox(width: 14),
-                    Expanded(child: Text(
-                      p.role == 'agent' ? 'Assigned work' : 'Need a service?\\nCreate a request and track it here.',
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-                    )),
+                    Expanded(
+                      child: Text(
+                        isAgent
+                            ? 'Your assigned work\nManage and update request status.'
+                            : 'Need a service?\nCreate a request and track it here.',
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 14),
-            if (p.role == 'customer')
+            if (!isAgent) ...[
               FilledButton.icon(
                 onPressed: () async {
-                  await Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateRequestScreen()));
+                  await Navigator.push(
+                      context, MaterialPageRoute(builder: (_) => const CreateRequestScreen()));
                   load();
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Create Service Request'),
               ),
-            if (p.role == 'customer') ...[
               const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServicesScreen())),
-                icon: const Icon(Icons.miscellaneous_services),
-                label: const Text('Browse Services'),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => MyRequestsScreen(profile: p))),
+                      icon: const Icon(Icons.list_alt),
+                      label: Text('My Requests (${requests.length})'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ServicesScreen())),
+                    icon: const Icon(Icons.miscellaneous_services),
+                    label: const Text('Services'),
+                  ),
+                ],
+              ),
+            ] else ...[
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'All', label: Text('All')),
+                  ButtonSegment(value: 'Active', label: Text('Active')),
+                  ButtonSegment(value: 'Completed', label: Text('Completed')),
+                ],
+                selected: {agentFilter},
+                onSelectionChanged: (s) => setState(() => agentFilter = s.first),
               ),
             ],
             const SizedBox(height: 22),
-            Text(p.role == 'agent' ? 'Assigned Requests' : 'My Requests', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              isAgent ? 'Assigned Requests' : 'Recent Requests',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 8),
-            if (requests.isEmpty)
-              const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No requests yet.')))
+            if (recent.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: Text('Nothing here yet.')),
+              )
             else
-              ...requests.map((r) => Card(
-                child: ListTile(
-                  title: Text('${r.code} • ${r.serviceName}'),
-                  subtitle: Text('${r.status.replaceAll('_',' ')} • ${r.priority.toUpperCase()}'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => RequestDetailsScreen(request: r, profile: p)));
-                    load();
-                  },
-                ),
-              )),
+              ...recent.map((r) => Card(
+                    child: ListTile(
+                      title: Text('${r.code} · ${r.serviceName}'),
+                      subtitle: Text(
+                          '${r.status.replaceAll('_', ' ').toUpperCase()} · ${r.priority.toUpperCase()}'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _openRequest(r),
+                    ),
+                  )),
           ],
         ),
       ),

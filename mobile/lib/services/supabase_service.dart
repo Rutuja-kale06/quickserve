@@ -5,17 +5,27 @@ class SupabaseService {
   final client = Supabase.instance.client;
 
   Future<Profile> getProfile() async {
-    final data = await client.from('profiles').select().eq('id', client.auth.currentUser!.id).single();
+    final data = await client
+        .from('profiles')
+        .select()
+        .eq('id', client.auth.currentUser!.id)
+        .single();
     return Profile.fromMap(data);
   }
 
   Future<List<ServiceItem>> getServices() async {
-    final data = await client.from('services').select().eq('active', true).order('name');
+    final data =
+        await client.from('services').select().eq('active', true).order('name');
     return (data as List).map((e) => ServiceItem.fromMap(e)).toList();
   }
 
+  /// Lists requests the current user may see:
+  ///  - customer: their own requests
+  ///  - agent: requests assigned to them (pass agentId)
   Future<List<ServiceRequest>> getRequests({String? agentId}) async {
-    var query = client.from('service_requests').select('*, services(name)');
+    var query = client
+        .from('service_requests')
+        .select('*, services(name), customer:profiles!service_requests_customer_id_fkey(full_name)');
     if (agentId != null) {
       query = query.eq('assigned_agent_id', agentId);
     }
@@ -38,16 +48,47 @@ class SupabaseService {
       'p_priority': priority,
     });
     final row = Map<String, dynamic>.from(data as Map);
-    final service = await client.from('services').select().eq('id', serviceId).single();
+    final service =
+        await client.from('services').select().eq('id', serviceId).single();
     row['services'] = service;
     return ServiceRequest.fromMap(row);
   }
 
-  Future<void> updateRequest(String id, Map<String, dynamic> changes) async {
-    await client.from('service_requests').update(changes).eq('id', id);
+  /// Routed through the SECURITY DEFINER RPC: enforces ownership, role rules
+  /// and lifecycle transitions server-side and writes the audit trail.
+  Future<void> updateRequestStatus(
+    String id,
+    String newStatus, {
+    String note = '',
+  }) async {
+    await client.rpc('update_request_status', params: {
+      'p_request_id': id,
+      'p_new_status': newStatus,
+      'p_note': note,
+    });
+  }
+
+  Future<List<RequestHistoryItem>> getRequestHistory(String requestId) async {
+    final data = await client
+        .from('request_status_history')
+        .select(
+            'id, old_status, new_status, note, created_at, changed_by:profiles!request_status_history_changed_by_fkey(full_name)')
+        .eq('request_id', requestId)
+        .order('created_at', ascending: true);
+    return (data as List).map((e) => RequestHistoryItem.fromMap(e)).toList();
+  }
+
+  /// Lightweight application-level audit for auth/authorisation events.
+  /// Server-side RPC enforces the allowed event list.
+  Future<void> logEvent(String event, {Map<String, dynamic>? metadata}) async {
+    await client.rpc('write_audit', params: {
+      'p_event': event,
+      'p_metadata': metadata ?? {},
+    });
   }
 
   Future<void> signOut() => client.auth.signOut();
 
-  Future<void> sendReset(String email) => client.auth.resetPasswordForEmail(email);
+  Future<void> sendReset(String email) =>
+      client.auth.resetPasswordForEmail(email);
 }

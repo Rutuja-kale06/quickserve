@@ -28,6 +28,37 @@ class ServiceItem {
   );
 }
 
+class RequestHistoryItem {
+  final int id;
+  final String newStatus;
+  final String? oldStatus;
+  final String note;
+  final String changedByName;
+  final DateTime createdAt;
+
+  RequestHistoryItem({
+    required this.id,
+    required this.newStatus,
+    this.oldStatus,
+    required this.note,
+    required this.changedByName,
+    required this.createdAt,
+  });
+
+  factory RequestHistoryItem.fromMap(Map<String, dynamic> m) {
+    final changedBy = m['changed_by'];
+    return RequestHistoryItem(
+      id: m['id'],
+      newStatus: m['new_status'] ?? 'created',
+      oldStatus: m['old_status'],
+      note: m['note'] ?? '',
+      changedByName:
+          changedBy is Map ? (changedBy['full_name'] ?? 'System') : 'System',
+      createdAt: DateTime.parse(m['created_at']),
+    );
+  }
+}
+
 class ServiceRequest {
   final String id;
   final String code;
@@ -39,6 +70,7 @@ class ServiceRequest {
   final DateTime preferredAt;
   final String? notes;
   final String? agentId;
+  final String customerName;
 
   ServiceRequest({
     required this.id,
@@ -51,10 +83,12 @@ class ServiceRequest {
     required this.preferredAt,
     this.notes,
     this.agentId,
+    this.customerName = '',
   });
 
   factory ServiceRequest.fromMap(Map<String, dynamic> m) {
     final service = m['services'];
+    final customer = m['customer'];
     return ServiceRequest(
       id: m['id'],
       code: m['request_code'],
@@ -66,6 +100,7 @@ class ServiceRequest {
       preferredAt: DateTime.parse(m['preferred_at']),
       notes: m['notes'],
       agentId: m['assigned_agent_id'],
+      customerName: customer is Map ? (customer['full_name'] ?? '') : '',
     );
   }
 }
