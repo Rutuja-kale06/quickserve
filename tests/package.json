@@ -1,0 +1,11 @@
+{
+  "name": "quickserve-rls-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node rls-authz.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0"
+  }
+}

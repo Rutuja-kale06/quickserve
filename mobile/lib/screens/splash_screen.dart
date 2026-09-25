@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_screen.dart';
@@ -13,17 +15,32 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
-    _go();
+    _timer = Timer(const Duration(milliseconds: 1400), _go);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> _go() async {
-    await Future.delayed(const Duration(milliseconds: 1400));
     if (!mounted) return;
-    final session = Supabase.instance.client.auth.currentSession;
-    final next = session == null ? const AuthScreen() : const HomeScreen();
+    Widget next = const AuthScreen();
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) next = const HomeScreen();
+    } on Exception {
+      // Cannot resolve the persisted session (e.g. offline/proxy). Fall back
+      // to Login; the user can authenticate once connectivity is restored.
+      next = const AuthScreen();
+    }
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => next),
     );

@@ -1,25 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { assignAgent, setStatus } from '../api';
 import RequestDetailsModal from './RequestDetailsModal';
-
-const STATUSES = ['created', 'assigned', 'accepted', 'in_progress', 'completed', 'cancelled'];
+import { filterRequests, STATUSES } from '../utils';
 
 export default function RequestsPanel({ requests, agents, onChanged, onError }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return requests.filter(
-      (r) =>
-        (filter === 'all' || r.status === filter) &&
-        (q === '' ||
-          `${r.request_code} ${r.description} ${r.customer?.full_name ?? ''} ${r.services?.name ?? ''}`
-            .toLowerCase()
-            .includes(q))
-    );
-  }, [requests, search, filter]);
+  const filtered = useMemo(
+    () => filterRequests(requests, search, filter),
+    [requests, search, filter]
+  );
 
   const tryAction = async (fn) => {
     try {
