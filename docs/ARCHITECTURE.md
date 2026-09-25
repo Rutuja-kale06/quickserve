@@ -1,93 +1,124 @@
-# Architecture and Database Documentation
+# QuickServe — Architecture & Database
 
 ## Components
 
-### Flutter
-The mobile application uses a small service/repository layer around Supabase. Screens are role-aware but backend authorization remains authoritative.
+### Flutter mobile app (`mobile/`)
+Role-aware, but authorization is **never** decided by the UI alone. The app talks
+to Supabase through a thin service layer (`lib/services/supabase_service.dart`)
+that wraps RPCs and queries. Screens: Splash → Login/Register → Home →
+Services / Create Request / My Requests / Request Details → Profile → Logout.
 
-### React Admin
-The admin portal uses Supabase Auth and direct database queries protected by RLS. It provides dashboard statistics, request assignment/status management, customer/agent views and audit information.
+- **Secure status changes** go through the `update_request_status` RPC (the DB
+  re-checks ownership, role and transition rules).
+- **Auth events** (`LOGIN_SUCCESS`, `LOGIN_FAILED`) are written through the
+  `write_audit` RPC after a real sign-in actually happens.
+- Config is injectable via `--dart-define` with placeholder fallbacks.
 
-### Supabase
-Supabase provides:
-- PostgreSQL
-- Auth
-- RLS
-- SQL functions/triggers
-- Realtime-ready infrastructure
+### React admin portal (`admin-web/`)
+Served by Vite. Components: `Login` (admin-only gate), `Dashboard` (stat cards),
+`RequestsPanel` (search/filter/assign/status/details modal), `People`
+(customers/agents), `AuditLog`. Data access is centralized in `src/api.js`;
+search/filtering lives in unit-tested `src/utils.js`. A failed admin sign-in or a
+non-admin sign-in attempt writes `AUTHORIZATION_FAILED` to the audit trail.
+
+### Supabase backend (`supabase/`)
+PostgreSQL + Auth + RLS + RPCs + triggers:
+
+- `001_schema.sql` — schema, indexes, triggers, functions, RLS, service seed.
+- `002_seed.sql` — demo accounts.
+
+---
+
+## System data flow
+
+```mermaid
+sequenceDiagram
+    participant U as Flutter (Customer)
+    participant P as Admin Portal (React)
+    participant S as Supabase
+    participant DB as PostgreSQL
+
+    U->>S: signInWithPassword (email)
+    S-->>U: session
+    U->>S: RPC create_request(service, desc, date, addr, priority)
+    S->>DB: INSERT service_requests (RLS: customer_id = auth.uid())
+    DB-->>S: REQ-2026-000123 + audit REQUEST_CREATED
+    P->>S: UPDATE service_requests (RLS: admin)
+    DB-->>S: ASSIGNED + audit REQUEST_ASSIGNED
+    U->>S: RPC update_request_status(assigned, accepted)
+    S->>DB: ownership + transition checks, history + audit
+```
+
+---
 
 ## Data model
 
 ```mermaid
 erDiagram
-    AUTH_USERS ||--|| PROFILES : has
-    PROFILES ||--o{ SERVICE_REQUESTS : creates
-    SERVICES ||--o{ SERVICE_REQUESTS : requested_for
-    PROFILES ||--o{ SERVICE_REQUESTS : assigned_to
-    SERVICE_REQUESTS ||--o{ REQUEST_STATUS_HISTORY : has
-    PROFILES ||--o{ REQUEST_STATUS_HISTORY : changes
-    PROFILES ||--o{ AUDIT_LOGS : performs
-    SERVICE_REQUESTS ||--o{ AUDIT_LOGS : references
+    AUTH_USERS ||--|| PROFILES : "has"
+    PROFILES ||--o{ SERVICE_REQUESTS : "creates"
+    SERVICES ||--o{ SERVICE_REQUESTS : "requested_for"
+    PROFILES ||--o{ SERVICE_REQUESTS : "assigned_to"
+    SERVICE_REQUESTS ||--o{ REQUEST_STATUS_HISTORY : "tracks"
+    PROFILES ||--o{ REQUEST_STATUS_HISTORY : "approves"
+    PROFILES ||--o{ AUDIT_LOGS : "performs"
+    SERVICE_REQUESTS ||--o{ AUDIT_LOGS : "referenced_by"
 
     PROFILES {
-      uuid id PK
-      text full_name
-      text phone
-      text role
-      timestamptz created_at
+        uuid id PK "FK auth.users"
+        text full_name
+        text phone
+        enum role "customer|agent|admin"
+        timestamptz created_at
     }
-
     SERVICES {
-      uuid id PK
-      text name
-      text description
-      boolean active
+        uuid id PK
+        text name UK
+        text description
+        boolean active
+        timestamptz created_at
     }
-
     SERVICE_REQUESTS {
-      uuid id PK
-      text request_code UK
-      uuid customer_id FK
-      uuid service_id FK
-      uuid assigned_agent_id FK
-      text description
-      timestamptz preferred_at
-      text address
-      text priority
-      text status
-      text notes
-      timestamptz created_at
-      timestamptz updated_at
+        uuid id PK
+        text request_code UK "REQ-2026-000123"
+        uuid customer_id FK
+        uuid service_id FK
+        uuid assigned_agent_id FK "nullable"
+        text description
+        timestamptz preferred_at
+        text address
+        enum priority "low|medium|high"
+        enum status "see lifecycle"
+        text notes
+        timestamptz created_at
+        timestamptz updated_at
     }
-
     REQUEST_STATUS_HISTORY {
-      bigint id PK
-      uuid request_id FK
-      text old_status
-      text new_status
-      uuid changed_by FK
-      text note
-      timestamptz created_at
+        bigint id PK "identity"
+        uuid request_id FK
+        enum old_status
+        enum new_status
+        uuid changed_by FK
+        text note
+        timestamptz created_at
     }
-
     AUDIT_LOGS {
-      bigint id PK
-      uuid actor_id FK
-      uuid request_id FK
-      text event_type
-      jsonb metadata
-      timestamptz created_at
+        bigint id PK "identity"
+        uuid actor_id FK
+        uuid request_id FK "nullable"
+        text event_type
+        jsonb metadata
+        timestamptz created_at
     }
 ```
 
-## Indexes
+## Important field rules
 
-Indexes are provided for:
-- request code
-- customer ID
-- assigned agent ID
-- request status
-- created date
-- audit actor/date
+- `service_requests.request_code` — generated by a `BEFORE INSERT` trigger as
+  `REQ-<year>-<6-digit sequence>`. Unique.
+- `service_requests.status` — transitions enforced by trigger. No pass-through
+  jumps, no changes to/from terminal states.
+- `profiles.role` — immutable by the row owner; only an admin can change it
+  (beware of the SQL trigger in addition to RLS).
 
-These support common dashboard and role-specific queries.
+See `docs/DATABASE.md` for full DDL-level detail and index rationale.
