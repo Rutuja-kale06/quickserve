@@ -31,7 +31,19 @@ declare
   v_phone text;
   v_role text;
   v_user_id uuid;
+  v_has_id boolean;
 begin
+  -- auth.identities.id is either a regular uuid PK, an auto-generated
+  -- identity column, or altogether absent — the exact layout varies across
+  -- Supabase versions. Detect whether it may be inserted directly so this
+  -- seed script runs unchanged on any version.
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema = 'auth' and table_name = 'identities'
+      and column_name = 'id'
+      and (is_identity = 'NO' or identity_generation = 'BY DEFAULT')
+  ) into v_has_id;
+
   for i in 1 .. array_length(v_users, 1) loop
     v_email    := v_users[i][1];
     v_password := v_users[i][2];
@@ -47,7 +59,7 @@ begin
       insert into auth.users (
         instance_id, id, aud, role,
         email, encrypted_password,
-        email_confirmed_at, confirmed_at,
+        email_confirmed_at,
         raw_app_meta_data, raw_user_meta_data,
         created_at, updated_at
       )
@@ -55,7 +67,7 @@ begin
         '00000000-0000-0000-0000-000000000000',
         gen_random_uuid(), 'authenticated', 'authenticated',
         v_email, crypt(v_password, gen_salt('bf')),
-        now(), now(),
+        now(),
         jsonb_build_object('provider','email','providers',array['email']),
         jsonb_build_object('full_name', v_name, 'phone', v_phone),
         now(), now()
@@ -63,17 +75,34 @@ begin
       returning id into v_user_id;
     end if;
 
-    insert into auth.identities (
-      id, user_id, provider_id, identity_data, provider,
-      last_sign_in_at, created_at, updated_at
-    )
-    values (
-      v_user_id, v_user_id, v_user_id,
-      jsonb_build_object('sub', v_user_id, 'email', v_email,
-                         'email_verified', true, 'phone_verified', false),
-      'email', now(), now(), now()
-    )
-    on conflict (provider, id) do nothing;
+    -- Keep the email identity in sync on every run. The conflicting-unique
+    -- constraint is intentionally NOT named (it differs across Supabase
+    -- versions); "on conflict do nothing" suppresses duplicates on any version.
+    if v_has_id then
+      insert into auth.identities (
+        id, user_id, provider_id, identity_data, provider,
+        last_sign_in_at, created_at, updated_at
+      )
+      values (
+        gen_random_uuid(), v_user_id, v_user_id,
+        jsonb_build_object('sub', v_user_id, 'email', v_email,
+                           'email_verified', true, 'phone_verified', false),
+        'email', now(), now(), now()
+      )
+      on conflict do nothing;
+    else
+      insert into auth.identities (
+        user_id, provider_id, identity_data, provider,
+        last_sign_in_at, created_at, updated_at
+      )
+      values (
+        v_user_id, v_user_id,
+        jsonb_build_object('sub', v_user_id, 'email', v_email,
+                           'email_verified', true, 'phone_verified', false),
+        'email', now(), now(), now()
+      )
+      on conflict do nothing;
+    end if;
 
     insert into public.profiles (id, full_name, phone, role)
     values (v_user_id, v_name, v_phone, v_role::public.user_role)

@@ -89,6 +89,25 @@ async function signInAs(client, email) {
   return data.session;
 }
 
+// Deleting an auth user fails while any row still references its profile via a
+// non-cascading FK (service_requests.customer_id / assigned_agent_id → no action,
+// audit_logs.actor_id → no action; request_status_history cascades off requests).
+// So tear down those references first, then remove the auth users.
+async function deleteFixtureRows(ids) {
+  if (!ids.length) return;
+  await admin.from('service_requests')
+    .delete()
+    .or(`customer_id.in.(${ids.join(',')}),assigned_agent_id.in.(${ids.join(',')})`);
+  await admin.from('audit_logs').delete().or(`actor_id.in.(${ids.join(',')})`);
+}
+
+async function cleanupFixtures() {
+  const stale = await listTestUsers();
+  await deleteFixtureRows(stale.map((u) => u.id));
+  for (const u of stale) await admin.auth.admin.deleteUser(u.id);
+  await admin.from('services').delete().eq('name', '__AUTHZ_TEST__');
+}
+
 async function listTestUsers() {
   const out = [];
   let page = 1;
@@ -110,10 +129,7 @@ async function main() {
   console.log(`\nConnecting to ${URL}\n`);
 
   // ---- cleanup from previous runs --------------------------------------
-  for (const u of await listTestUsers()) {
-    await admin.auth.admin.deleteUser(u.id);
-  }
-  await admin.from('services').delete().eq('name', '__AUTHZ_TEST__');
+  await cleanupFixtures();
 
   // ---- fixtures ----------------------------------------------------------
   const users = {};
@@ -161,10 +177,14 @@ async function main() {
   pass('2. Customer B cannot READ Customer A\'s request', Array.isArray(crossRead) && crossRead.length === 0,
     `rows returned: ${crossRead?.length ?? 'n/a'}`);
 
-  await expectDenied('3. Customer B cannot UPDATE Customer A\'s request', async () => {
-    const { error } = await anon.from('service_requests').update({ status: 'cancelled' }).eq('id', reqA);
-    if (error) throw error;
-  });
+  await signInAs(anon, users.customerB.email);
+  // RLS denies silently (0 rows updated, no PL/pgSQL error), so assert on the
+  // rows actually changed rather than on a raised exception.
+  const { data: updRows } = await anon.from('service_requests')
+    .update({ status: 'cancelled' }).eq('id', reqA).select();
+  pass('3. Customer B cannot UPDATE Customer A\'s request',
+    (updRows ?? []).length === 0,
+    `rows updated: ${updRows?.length ?? 'n/a'}`);
 
   // 4. Nobody can self-promote to admin (role escalation) --------------------
   await expectDenied('4. Customer cannot escalate their own role to admin', async () => {
@@ -255,9 +275,7 @@ async function main() {
     `${auditA?.length ?? 0} events: ${(auditA ?? []).map((a) => a.event_type).slice(0, 4).join(', ')}…`);
 
   // ---- tear down test fixtures ----------------------------------------------
-  for (const u of await listTestUsers()) {
-    await admin.auth.admin.deleteUser(u.id);
-  }
+  await cleanupFixtures();
 
   // ---- report -----------------------------------------------------------------
   const failed = results.filter((r) => !r.ok);
