@@ -12,7 +12,10 @@ Services / Create Request / My Requests / Request Details → Profile → Logout
   re-checks ownership, role and transition rules).
 - **Auth events** (`LOGIN_SUCCESS`, `LOGIN_FAILED`) are written through the
   `write_audit` RPC after a real sign-in actually happens.
-- Config is injectable via `--dart-define` with placeholder fallbacks.
+- Config defaults to the bundled demo project (URL + **publishable** key);
+  `--dart-define=SUPABASE_URL=… --dart-define=SUPABASE_ANON_KEY=…` overrides it
+  per project. Web/desktop targets are included so the app can also run in a
+  browser without an Android emulator.
 
 ### React admin portal (`admin-web/`)
 Served by Vite. Components: `Login` (admin-only gate), `Dashboard` (stat cards),

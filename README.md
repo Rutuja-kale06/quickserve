@@ -118,12 +118,21 @@ Detailed notes: `supabase/README.md`.
 ```bash
 cd mobile
 flutter pub get
+flutter run
+```
+
+`lib/config.dart` already points at the bundled demo project (URL + **publishable** key),
+so the app runs out of the box. To point it at your own project instead, override with
+`--dart-define` (Project Settings → API → URL + anon/publishable key):
+
+```bash
 flutter run --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
             --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY
 ```
 
-Replace the `--dart-define` values with your project's API URL and **anon/publishable** key
-(Project Settings → API). `lib/config.dart` falls back to placeholders when the defines are absent.
+No Android device/emulator? Web and desktop targets are included:
+`flutter run -d chrome`, or serve the output of `flutter build web` (e.g. from
+`mobile/build/web`) with any static file server.
 
 Android release build:
 
@@ -226,7 +235,7 @@ secrets for `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`.
 | Logging/audit trail + error handling | ✅ audit events + friendly errors |
 | Architecture/database/security documentation | ✅ `docs/` |
 | README + setup/test credentials | ✅ this file |
-| Demo/walkthrough | screenshots & 3–5 min video: add after wiring a live project |
+| Demo/walkthrough | screenshots & 3–5 min video: live project wired, ready to record |
 
 ## Demo flow (5 minutes)
 

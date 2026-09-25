@@ -33,6 +33,20 @@ Change these passwords before sharing the repository (Settings → Authenticatio
 - `admin-web/.env` → `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
   (copy from `.env.example`).
 
+## Compatibility notes
+
+- `002_seed.sql` is **version-safe** for modern Supabase: it omits the now
+  generated `auth.users.confirmed_at` column and inserts `auth.identities`
+  without a hard-coded unique-constraint name, so it runs unchanged on older
+  and newer projects and can be re-run safely.
+- If a freshly seeded account cannot sign in on a particular project
+  (GoTrue answers `Database error querying schema` / `Database error loading
+  user`), the manually inserted auth rows are incompatible with that project's
+  Auth build. Delete those auth users (e.g. `delete from auth.users where
+  email in (...)` in the SQL editor) and recreate them via
+  **Authentication → Users → Add user** (email + password) or the admin API —
+  the `handle_new_user()` trigger then fills in their profile automatically.
+
 ## Design notes (brief)
 
 - Security model (RLS matrix, roles, audit) → `docs/SECURITY.md`.
