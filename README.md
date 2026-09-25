@@ -95,6 +95,26 @@ See `docs/ARCHITECTURE.md` for the ER diagram and data flow.
 
 ---
 
+## Screenshots (live project)
+
+Captured against the **live Supabase project** (real data, not mocked). See
+`docs/DEMO.md` for the full walkthrough.
+
+**Mobile (Flutter)** — `docs/screenshots/mobile-01-login.png`,
+`mobile-02-home.png`, `mobile-03-my-requests.png`,
+`mobile-04-request-details.png`, `mobile-05-services.png`,
+`mobile-07-agent-home.png`
+
+**Admin portal (React)** — `docs/screenshots/admin-01-login.png`,
+`admin-02-dashboard.png`, `admin-03-requests.png`, `admin-04-search.png`,
+`admin-05-request-details.png`, `admin-06-people-audit.png`
+
+![Mobile home](docs/screenshots/mobile-02-home.png)
+
+![Admin dashboard](docs/screenshots/admin-02-dashboard.png)
+
+---
+
 ## Getting started
 
 ### Prerequisites
@@ -235,7 +255,7 @@ secrets for `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`.
 | Logging/audit trail + error handling | ✅ audit events + friendly errors |
 | Architecture/database/security documentation | ✅ `docs/` |
 | README + setup/test credentials | ✅ this file |
-| Demo/walkthrough | screenshots & 3–5 min video: live project wired, ready to record |
+| Demo/walkthrough | ✅ `docs/DEMO.md` + `docs/screenshots/` (screenshots; video optional) |
 
 ## Demo flow (5 minutes)
 
