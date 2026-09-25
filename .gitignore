@@ -1,0 +1,26 @@
+# Flutter
+mobile/.dart_tool/
+mobile/.packages
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/ios/Pods/
+
+# Node
+admin-web/node_modules/
+admin-web/dist/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
