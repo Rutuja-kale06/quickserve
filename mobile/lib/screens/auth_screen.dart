@@ -28,11 +28,21 @@ class _AuthScreenState extends State<AuthScreen> {
         await auth.signInWithPassword(email: email.text.trim(), password: password.text);
         await api.logEvent('LOGIN_SUCCESS', metadata: {'email': email.text.trim()});
       } else {
-        await auth.signUp(
+        final resp = await auth.signUp(
           email: email.text.trim(),
           password: password.text,
           data: {'full_name': name.text.trim(), 'phone': phone.text.trim()},
         );
+        if (resp.session == null) {
+          // Email confirmation required: no live session yet.
+          _msg(
+              'Account created! Check your inbox to confirm your email, then log in.');
+          setState(() {
+            login = true;
+            loading = false;
+          });
+          return;
+        }
       }
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));

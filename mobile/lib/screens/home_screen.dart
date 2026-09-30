@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
 import '../services/supabase_service.dart';
 import 'request_details_screen.dart';
@@ -6,6 +7,7 @@ import 'create_request_screen.dart';
 import 'services_screen.dart';
 import 'profile_screen.dart';
 import 'my_requests_screen.dart';
+import 'auth_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,6 +32,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> load() async {
     try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const AuthScreen()),
+            (route) => false,
+          );
+        }
+        return;
+      }
       final p = await api.getProfile();
       final r = await api.getRequests(agentId: p.role == 'agent' ? p.id : null);
       if (!mounted) return;
@@ -66,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (loading && profile == null) {
+    if (loading || profile == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final p = profile!;

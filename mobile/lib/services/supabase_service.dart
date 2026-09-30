@@ -5,10 +5,12 @@ class SupabaseService {
   final client = Supabase.instance.client;
 
   Future<Profile> getProfile() async {
+    final id = client.auth.currentUser?.id;
+    if (id == null) throw StateError('Not signed in.');
     final data = await client
         .from('profiles')
         .select()
-        .eq('id', client.auth.currentUser!.id)
+        .eq('id', id)
         .single();
     return Profile.fromMap(data);
   }
